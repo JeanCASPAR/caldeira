@@ -9,7 +9,8 @@ use ash::{util, vk};
 use crate::vulkan::{Device, Instance};
 
 /// Free an iterator of *const c_char allocated by a CString and getted by using CString::into_raw() method
-/// Safety: the pointers must be unique and satisfy the conditions of CString::from_raw() method
+/// # Safety
+/// The pointers must be unique and satisfy the conditions of CString::from_raw() method
 pub unsafe fn free_cstring<I: IntoIterator<Item = *const c_char>>(iter: I) {
     for ptr in iter {
         CString::from_raw(ptr as *mut _);
@@ -89,4 +90,20 @@ pub fn find_memory_type(
     }
 
     panic!("failed to find suitable memory type!")
+}
+
+#[allow(dead_code, unused_variables)]
+pub fn image(image: vk::Image, format: vk::Format, device: &Device, instance: &Instance) {
+    let format_properties = unsafe {
+        instance
+            .instance
+            .get_physical_device_image_format_properties(
+                device.physical_device,
+                format,
+                vk::ImageType::TYPE_2D,
+                vk::ImageTiling::OPTIMAL,
+                vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+                vk::ImageCreateFlags::empty(),
+            )
+    };
 }

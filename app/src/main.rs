@@ -1,4 +1,6 @@
-use std::mem;
+#![allow(unused_variables)]
+
+use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use ash::version::DeviceV1_0;
@@ -15,24 +17,35 @@ fn main() {
         .init();
 
     let instance = Rc::new(vulkan::Instance::new());
+
+    #[allow(unused_variables)]
     #[cfg(feature = "validation-layers")]
     let debug = vulkan::Debug::new(Rc::clone(&instance));
 
     let device = Rc::new(vulkan::Device::new(Rc::clone(&instance)));
 
-    let descriptor = vulkan::DescriptorBuilder::new()
+    let command_pool = vulkan::CommandPool::new(&instance, Rc::clone(&device));
+
+    let descriptor_set_layout = vulkan::DescriptorSetLayoutBuilder::new()
         .with_binding(
             vk::DescriptorType::STORAGE_BUFFER,
-            1,
+            NonZeroU32::new(1).unwrap(),
+            vk::ShaderStageFlags::COMPUTE,
+            None,
+        )
+        .with_binding(
+            vk::DescriptorType::STORAGE_IMAGE,
+            NonZeroU32::new(1).unwrap(),
             vk::ShaderStageFlags::COMPUTE,
             None,
         )
         .build(Rc::clone(&device));
-    let descriptors = vec![descriptor];
+    let descriptor_set_layouts = [descriptor_set_layout];
 
-    let compute_pipeline = vulkan::ComputePipeline::new(&descriptors, Rc::clone(&device));
+    let compute_pipeline =
+        vulkan::ComputePipeline::new(&descriptor_set_layouts, Rc::clone(&device));
 
-    let buffer = vulkan::Buffer::new(
+    let mut buffer = vulkan::Buffer::new(
         4,
         vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::TRANSFER_SRC
@@ -42,17 +55,27 @@ fn main() {
         &instance,
     );
 
-    unsafe {
-        let data = device
-            .device
-            .map_memory(buffer.memory, 0, 4, vk::MemoryMapFlags::empty())
-            .unwrap();
-        (data as *mut u32).write(0);
-        device.device.unmap_memory(buffer.memory);
-    };
+    // unsafe {
+    //     let data = device
+    //         .device
+    //         .map_memory(buffer.memory, 0, 4, vk::MemoryMapFlags::empty())
+    //         .unwrap();
+    //     (data as *mut u32).write(0);
+    //     device.device.unmap_memory(buffer.memory);
+    // };
 
-    let mut descriptor_pool = vulkan::DescriptorPool::new(&descriptors[0], Rc::clone(&device));
-    let descriptor_sets = mem::replace(&mut descriptor_pool.descriptor_sets, Vec::new()); // Y en a qu'un pour l'instant
+    buffer.copy_data(&0u32, 0);
+
+    let mut output_image = vulkan::Image::new_storage(100, 100, Rc::clone(&device), &instance);
+
+    output_image.transition_layout(vk::ImageLayout::GENERAL, &command_pool);
+
+    let descriptor_pool = vulkan::DescriptorPoolBuilder::new()
+        .with(vk::DescriptorType::STORAGE_BUFFER, 1)
+        .with(vk::DescriptorType::STORAGE_IMAGE, 1)
+        .build(1, Rc::clone(&device));
+
+    let descriptor_sets = descriptor_set_layouts[0].allocate_descriptor_sets(1, &descriptor_pool);
 
     {
         let buffer_info = vk::DescriptorBufferInfo::builder()
@@ -61,13 +84,24 @@ fn main() {
             .range(4);
         let buffer_infos = [buffer_info.build()];
 
-        let descriptor_write = vk::WriteDescriptorSet::builder()
+        let image_info = vk::DescriptorImageInfo::builder()
+            .image_layout(output_image.layout)
+            .image_view(output_image.view);
+        let image_infos = [image_info.build()];
+
+        let descriptor_write_1 = vk::WriteDescriptorSet::builder()
             .dst_set(descriptor_sets[0])
             .dst_binding(0)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .buffer_info(&buffer_infos);
-        let descriptor_writes = [descriptor_write.build()];
+        let descriptor_write_2 = vk::WriteDescriptorSet::builder()
+            .dst_set(descriptor_sets[0])
+            .dst_binding(1)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+            .image_info(&image_infos);
+        let descriptor_writes = [descriptor_write_1.build(), descriptor_write_2.build()];
 
         unsafe {
             device
@@ -75,8 +109,6 @@ fn main() {
                 .update_descriptor_sets(&descriptor_writes, &[]);
         }
     }
-
-    let command_pool = vulkan::CommandPool::new(&instance, Rc::clone(&device));
 
     let command_buffer = vulkan::SingleTimeCommand::new(&device, &command_pool); // TODO: utiliser des command buffers alloués normalement et stockés
 
@@ -98,20 +130,53 @@ fn main() {
 
         device
             .device
-            .cmd_dispatch(command_buffer.command_buffer, 10, 10, 10);
+            .cmd_dispatch(command_buffer.command_buffer, 10, 10, 1);
 
         command_buffer.submit();
     }
 
-    unsafe {
-        let data = device
-            .device
-            .map_memory(buffer.memory, 0, 4, vk::MemoryMapFlags::empty())
-            .unwrap();
-        let output = (data as *mut u32).read();
+    let output = {
+        let mut output = 0;
+        buffer.get_data(&mut output, 0);
         println!("output: {}", output);
-        device.device.unmap_memory(buffer.memory);
+        output
     };
+
+    debug_assert!(output == output_image.extent.width * output_image.extent.height);
+
+    let pixels = {
+        let size = output * 4;
+
+        let mut pixels = vec![0u8; size as _];
+
+        let mut staging_buffer = vulkan::Buffer::new(
+            size as _,
+            vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+            Rc::clone(&device),
+            &instance,
+        );
+
+        output_image.transition_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL, &command_pool);
+        output_image.copy_to_buffer(&mut staging_buffer, &command_pool);
+
+        staging_buffer.get_data(&mut pixels[..], 0);
+
+        pixels
+    };
+
+    {
+        let image = image::ImageBuffer::<image::Rgba<_>, _>::from_vec(
+            output_image.extent.width,
+            output_image.extent.height,
+            pixels,
+        )
+        .unwrap();
+
+        image
+            .save_with_format("image.png", image::ImageFormat::Png)
+            .unwrap();
+    }
 
     let mut window = vulkan::Window::<()>::new();
 
@@ -120,6 +185,18 @@ fn main() {
         .take()
         .unwrap()
         .run(move |event, _, control_flow| {
+            let instance = &instance;
+            let debug = &debug;
+            let device = &device;
+            let command_pool = &command_pool;
+            let window = &window;
+            let descriptors = &descriptor_set_layouts;
+            let descriptor_pool = &descriptor_pool;
+            let descriptor_sets = &descriptor_sets;
+            let buffer = &buffer;
+            let output_image = &output_image;
+            let compute_pipeline = &compute_pipeline;
+
             // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
             // dispatched any events. This is ideal for games and similar applications.
             *control_flow = ControlFlow::Poll;

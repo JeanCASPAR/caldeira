@@ -33,21 +33,26 @@ unsafe extern "system" fn debug_callback(
     let message = CStr::from_ptr((*callback_data).p_message).to_str().unwrap();
     match message_severity {
         vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
-            log::trace!("[VERBOSE][{}] Validation layer: {}", message_type, message)
+            log::trace!("[VERBOSE][{}] Validation layer: {}", message_type, message);
+            vk::FALSE
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
-            log::info!("[INFO][{}] Validation layer: {}", message_type, message)
+            log::info!("[INFO][{}] Validation layer: {}", message_type, message);
+            vk::FALSE
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
-            log::warn!("[INFO][{}] Validation layer: {}", message_type, message)
+            log::warn!("[INFO][{}] Validation layer: {}", message_type, message);
+            vk::FALSE
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
-            log::error!("[INFO][{}] Validation layer: {}", message_type, message)
+            log::error!("[INFO][{}] Validation layer: {}", message_type, message);
+            vk::TRUE
         }
-        _ => log::error!("[UNKNOWN][{}] Validation layer: {}", message_type, message),
+        _ => {
+            log::error!("[UNKNOWN][{}] Validation layer: {}", message_type, message);
+            vk::TRUE
+        }
     }
-
-    vk::FALSE
 }
 
 pub struct Debug {

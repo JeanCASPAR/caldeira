@@ -1,10 +1,26 @@
 #version 450
-#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shader_image_load_store : enable
 
-layout(binding = 0) buffer x {
-    uint y;
-};
+layout(local_size_x = 10, local_size_y = 10) in;
+
+layout(binding = 0, set = 0) buffer Storage {
+    restrict uint x;
+} data;
+
+layout(binding = 1, set = 0, rgba8ui) uniform restrict writeonly uimage2D image;
 
 void main() {
-    atomicAdd(y, 1);
+    atomicAdd(data.x, 1);
+    
+    ivec2 coords = ivec2(gl_GlobalInvocationID);
+
+    uvec4 pixel;
+
+    if (((gl_WorkGroupID.x + gl_WorkGroupID.y) & 1u) != 0u) {
+        pixel = uvec4(255, 128, 0, 255);
+    } else {
+        pixel = uvec4(0, 128, 255, 255);
+    }
+
+    imageStore(image, coords, pixel);
 }

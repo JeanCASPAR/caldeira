@@ -1,15 +1,17 @@
+use std::mem;
+use std::ptr;
 use std::rc::Rc;
 
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::{Device, Instance};
+use super::{CommandPool, Device, Image, Instance, SingleTimeCommand};
 use crate::utils;
 
 pub struct Buffer {
     pub buffer: vk::Buffer,
     pub memory: vk::DeviceMemory,
-    _device: Rc<Device>,
+    device: Rc<Device>,
 }
 
 impl Buffer {
@@ -25,7 +27,7 @@ impl Buffer {
         Self {
             buffer,
             memory,
-            _device: device,
+            device,
         }
     }
 
@@ -64,13 +66,110 @@ impl Buffer {
 
         (buffer, memory)
     }
+
+    pub fn copy_data<T: ?Sized>(&mut self, data: &T, offset: usize) {
+        let size = mem::size_of_val(data);
+        let src = data as *const _ as *const u8;
+
+        unsafe {
+            let ptr = self
+                .device
+                .device
+                .map_memory(
+                    self.memory,
+                    offset as _,
+                    size as _,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .unwrap();
+            ptr::copy_nonoverlapping(src, ptr.cast(), size);
+            self.device.device.unmap_memory(self.memory);
+        }
+    }
+
+    pub fn get_data<T: ?Sized>(&self, data: &mut T, offset: usize) {
+        let dst = data as *mut _ as *mut u8;
+        let size = mem::size_of_val(data);
+
+        unsafe {
+            let src = self
+                .device
+                .device
+                .map_memory(
+                    self.memory,
+                    offset as _,
+                    size as _,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .unwrap();
+            ptr::copy_nonoverlapping(src.cast(), dst, size);
+            self.device.device.unmap_memory(self.memory);
+        }
+    }
+
+    pub fn copy_to_buffer(&self, dst: &mut Self, size: vk::DeviceSize, command_pool: &CommandPool) {
+        let command_buffer = SingleTimeCommand::new(&self.device, command_pool);
+
+        let buffer_copy = vk::BufferCopy::builder().size(size);
+        let regions = [buffer_copy.build()];
+
+        unsafe {
+            self.device.device.cmd_copy_buffer(
+                command_buffer.command_buffer,
+                self.buffer,
+                dst.buffer,
+                &regions,
+            );
+        }
+
+        command_buffer.submit();
+    }
+
+    pub fn copy_to_image(&self, dst: &mut Image, command_pool: &CommandPool) {
+        let command_buffer = SingleTimeCommand::new(&self.device, command_pool);
+
+        let image_subresource = vk::ImageSubresourceLayers::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .mip_level(0)
+            .base_array_layer(0)
+            .layer_count(1)
+            .build();
+
+        let image_offset = vk::Offset3D::builder().x(0).y(0).z(0).build();
+
+        let region = vk::BufferImageCopy::builder()
+            .buffer_offset(0)
+            .buffer_row_length(0)
+            .buffer_image_height(0)
+            .image_subresource(image_subresource)
+            .image_offset(image_offset)
+            .image_extent(dst.extent)
+            .build();
+        let regions = [region];
+
+        if dst.layout != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
+            dst.transition_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL, command_pool);
+        }
+
+        unsafe {
+            self.device.device.cmd_copy_buffer_to_image(
+                command_buffer.command_buffer,
+                self.buffer,
+                dst.image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &regions,
+            );
+        }
+
+        command_buffer.submit();
+    }
 }
 
 impl Drop for Buffer {
     fn drop(&mut self) {
         unsafe {
-            self._device.device.destroy_buffer(self.buffer, None);
-            self._device.device.free_memory(self.memory, None);
+            self.device.device.destroy_buffer(self.buffer, None);
+            self.device.device.free_memory(self.memory, None);
         }
     }
 }

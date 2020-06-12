@@ -12,6 +12,10 @@ pub const INSTANCE_EXTENSIONS: &[&str] = &[
     #[cfg(feature = "validation-layers")]
     "VK_EXT_debug_utils",
 ];
-pub const VALIDATION_LAYERS: &[&str] =
-    &["VK_LAYER_LUNARG_standard_validation", "VK_LAYER_NV_optimus"];
+pub const VALIDATION_LAYERS: &[&str] = &[
+    // "VK_LAYER_LUNARG_api_dump",
+    #[cfg(feature = "validation-layers")]
+    "VK_LAYER_KHRONOS_validation",
+    "VK_LAYER_NV_optimus",
+];
 pub const DEVICE_EXTENSIONS: &[&str] = &["VK_KHR_swapchain"];

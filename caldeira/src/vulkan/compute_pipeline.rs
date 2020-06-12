@@ -4,7 +4,7 @@ use std::rc::Rc;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::{Descriptor, Device};
+use super::{DescriptorSetLayout, Device};
 use crate::utils;
 
 pub struct ComputePipeline {
@@ -14,9 +14,9 @@ pub struct ComputePipeline {
 }
 
 impl ComputePipeline {
-    pub fn new(descriptors: &[Descriptor], device: Rc<Device>) -> Self {
+    pub fn new(descriptor_set_layouts: &[DescriptorSetLayout], device: Rc<Device>) -> Self {
         let (compute_pipeline, pipeline_layout) =
-            Self::create_compute_pipeline(descriptors, &device);
+            Self::create_compute_pipeline(descriptor_set_layouts, &device);
 
         Self {
             compute_pipeline,
@@ -25,11 +25,15 @@ impl ComputePipeline {
         }
     }
 
-    fn create_pipeline_layout(descriptors: &[Descriptor], device: &Device) -> vk::PipelineLayout {
-        let set_layouts = descriptors
-            .into_iter()
+    fn create_pipeline_layout(
+        descriptor_set_layouts: &[DescriptorSetLayout],
+        device: &Device,
+    ) -> vk::PipelineLayout {
+        let set_layouts = descriptor_set_layouts
+            .iter()
             .map(|descriptor| descriptor.descriptor_set_layout)
             .collect::<Vec<_>>();
+
         let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(&set_layouts);
         // .push_constant_ranges(push_constant_ranges);
 
@@ -38,7 +42,7 @@ impl ComputePipeline {
     }
 
     fn create_compute_pipeline(
-        descriptors: &[Descriptor],
+        descriptor_set_layouts: &[DescriptorSetLayout],
         device: &Device,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
         let shader_code = utils::read_file("shaders/compute.spv");
@@ -50,14 +54,14 @@ impl ComputePipeline {
             .stage(vk::ShaderStageFlags::COMPUTE)
             .module(module)
             .name(&name)
-            //.specialization_info(specialization_info)
+            // .specialization_info(specialization_info)
             .build();
 
-        let layout = Self::create_pipeline_layout(descriptors, device);
+        let pipeline_layout = Self::create_pipeline_layout(descriptor_set_layouts, device);
 
         let pipeline_info = vk::ComputePipelineCreateInfo::builder()
             .stage(stage)
-            .layout(layout)
+            .layout(pipeline_layout)
             .build();
 
         let pipeline = unsafe {
@@ -69,7 +73,11 @@ impl ComputePipeline {
         }
         .expect("failed to create compute pipeline")[0];
 
-        (pipeline, layout)
+        unsafe {
+            device.device.destroy_shader_module(module, None);
+        }
+
+        (pipeline, pipeline_layout)
     }
 }
 

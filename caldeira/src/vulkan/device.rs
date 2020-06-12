@@ -87,6 +87,10 @@ impl Device {
             return 0;
         }
 
+        if features.shader_storage_image_write_without_format == 0 {
+            return 0;
+        }
+
         score
     }
 
@@ -103,7 +107,7 @@ impl Device {
             .queue_priorities(&priorities);
         let queue_create_infos = [queue_create_info.build()];
 
-        let device_features = vk::PhysicalDeviceFeatures::builder();
+        let device_features = vk::PhysicalDeviceFeatures::builder(); //.shader_storage_image_write_without_format(true);
 
         let create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(&queue_create_infos)

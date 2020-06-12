@@ -32,6 +32,16 @@ impl CommandPool {
     }
 }
 
+impl Drop for CommandPool {
+    fn drop(&mut self) {
+        unsafe {
+            self.device
+                .device
+                .destroy_command_pool(self.command_pool, None);
+        }
+    }
+}
+
 #[must_use = "SingleTimeCommand should be used with .submit() method"]
 pub struct SingleTimeCommand<'a> {
     pub command_buffer: vk::CommandBuffer,
@@ -89,6 +99,7 @@ impl<'a> SingleTimeCommand<'a> {
             .command_buffers(&command_buffers)
             .build();
         let submits = [submit_info];
+
         unsafe {
             device
                 .device
@@ -323,7 +334,7 @@ impl SingleUsageCommandPool {
                     return true;
                 }
                 let status = self.device.device.get_fence_status(*fence);
-                println!("status");
+                println!("status: {:?}", status);
                 status.is_ok()
             })
             .next()?
