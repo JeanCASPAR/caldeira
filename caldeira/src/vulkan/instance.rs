@@ -41,9 +41,9 @@ impl Instance {
         #[cfg(feature = "validation-layers")]
         let enabled = [
             // vk::ValidationFeatureEnableEXT::GPU_ASSISTED,
-            vk::ValidationFeatureEnableEXT::GPU_ASSISTED_RESERVE_BINDING_SLOT,
+            // vk::ValidationFeatureEnableEXT::GPU_ASSISTED_RESERVE_BINDING_SLOT,
             vk::ValidationFeatureEnableEXT::BEST_PRACTICES,
-            vk::ValidationFeatureEnableEXT::DEBUG_PRINTF,
+            // vk::ValidationFeatureEnableEXT::DEBUG_PRINTF,
         ];
         #[cfg(feature = "validation-layers")]
         let mut validation_features =

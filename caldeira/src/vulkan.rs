@@ -1,10 +1,9 @@
 mod buffer;
+mod byte_copiable;
 mod command_pool;
 mod compute_pipeline;
 #[cfg(feature = "validation-layers")]
 mod debug;
-// mod descriptor;
-// mod descriptor_pool;
 mod descriptors;
 mod device;
 mod image;
@@ -12,12 +11,11 @@ mod instance;
 mod window;
 
 pub use self::buffer::Buffer;
+pub use self::byte_copiable::ByteCopiable;
 pub use self::command_pool::{CommandPool, SingleTimeCommand};
 pub use self::compute_pipeline::ComputePipeline;
 #[cfg(feature = "validation-layers")]
 pub use self::debug::Debug;
-// pub use self::descriptor::{Descriptor, DescriptorBuilder};
-// pub use self::descriptor_pool::DescriptorPool;
 pub use self::descriptors::{
     DescriptorPool, DescriptorPoolBuilder, DescriptorSetLayout, DescriptorSetLayoutBuilder,
 };

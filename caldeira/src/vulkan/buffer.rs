@@ -5,7 +5,7 @@ use std::rc::Rc;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use super::{CommandPool, Device, Image, Instance, SingleTimeCommand};
+use super::{ByteCopiable, CommandPool, Device, Image, Instance, SingleTimeCommand};
 use crate::utils;
 
 pub struct Buffer {
@@ -67,7 +67,7 @@ impl Buffer {
         (buffer, memory)
     }
 
-    pub fn copy_data<T: ?Sized>(&mut self, data: &T, offset: usize) {
+    pub fn copy_data<T: ?Sized + ByteCopiable>(&mut self, data: &T, offset: usize) {
         let size = mem::size_of_val(data);
         let src = data as *const _ as *const u8;
 
@@ -87,7 +87,7 @@ impl Buffer {
         }
     }
 
-    pub fn get_data<T: ?Sized>(&self, data: &mut T, offset: usize) {
+    pub fn get_data<T: ?Sized + ByteCopiable>(&self, data: &mut T, offset: usize) {
         let dst = data as *mut _ as *mut u8;
         let size = mem::size_of_val(data);
 

@@ -69,7 +69,7 @@ impl Image {
             Rc::clone(&device),
             instance,
         );
-        staging_buffer.copy_data(&pixels, 0);
+        staging_buffer.copy_data(&pixels[..], 0);
 
         texture_image
     }

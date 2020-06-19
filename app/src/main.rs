@@ -1,12 +1,15 @@
 #![allow(unused_variables)]
 
+use std::f32::consts::PI;
 use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-use winit::event::{Event, WindowEvent};
+use rand::{distributions::Uniform, seq::SliceRandom, thread_rng, Rng};
+
+use winit::event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 use caldeira::vulkan;
@@ -39,6 +42,12 @@ fn main() {
             vk::ShaderStageFlags::COMPUTE,
             None,
         )
+        .with_binding(
+            vk::DescriptorType::UNIFORM_BUFFER,
+            NonZeroU32::new(1).unwrap(),
+            vk::ShaderStageFlags::COMPUTE,
+            None,
+        )
         .build(Rc::clone(&device));
     let descriptor_set_layouts = [descriptor_set_layout];
 
@@ -55,18 +64,9 @@ fn main() {
         &instance,
     );
 
-    // unsafe {
-    //     let data = device
-    //         .device
-    //         .map_memory(buffer.memory, 0, 4, vk::MemoryMapFlags::empty())
-    //         .unwrap();
-    //     (data as *mut u32).write(0);
-    //     device.device.unmap_memory(buffer.memory);
-    // };
-
     buffer.copy_data(&0u32, 0);
 
-    let mut output_image = vulkan::Image::new_storage(100, 100, Rc::clone(&device), &instance);
+    let mut output_image = vulkan::Image::new_storage(1_000, 1_000, Rc::clone(&device), &instance);
 
     output_image.transition_layout(vk::ImageLayout::GENERAL, &command_pool);
 
@@ -78,11 +78,11 @@ fn main() {
     let descriptor_sets = descriptor_set_layouts[0].allocate_descriptor_sets(1, &descriptor_pool);
 
     {
-        let buffer_info = vk::DescriptorBufferInfo::builder()
+        let buffer_info_1 = vk::DescriptorBufferInfo::builder()
             .buffer(buffer.buffer)
             .offset(0)
             .range(4);
-        let buffer_infos = [buffer_info.build()];
+        let buffer_infos = [buffer_info_1.build()];
 
         let image_info = vk::DescriptorImageInfo::builder()
             .image_layout(output_image.layout)
@@ -94,14 +94,17 @@ fn main() {
             .dst_binding(0)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-            .buffer_info(&buffer_infos);
+            .buffer_info(&buffer_infos[0..1]);
         let descriptor_write_2 = vk::WriteDescriptorSet::builder()
             .dst_set(descriptor_sets[0])
             .dst_binding(1)
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
             .image_info(&image_infos);
-        let descriptor_writes = [descriptor_write_1.build(), descriptor_write_2.build()];
+        let descriptor_writes = [
+            descriptor_write_1.build(),
+            descriptor_write_2.build(),
+        ];
 
         unsafe {
             device
@@ -130,7 +133,7 @@ fn main() {
 
         device
             .device
-            .cmd_dispatch(command_buffer.command_buffer, 10, 10, 1);
+            .cmd_dispatch(command_buffer.command_buffer, 100, 100, 1);
 
         command_buffer.submit();
     }
@@ -145,7 +148,7 @@ fn main() {
     debug_assert!(output == output_image.extent.width * output_image.extent.height);
 
     let pixels = {
-        let size = output * 4;
+        let size = output_image.extent.width * output_image.extent.height * 4;
 
         let mut pixels = vec![0u8; size as _];
 
@@ -207,12 +210,18 @@ fn main() {
             // *control_flow = ControlFlow::Wait;
 
             match event {
-                Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    ..
-                } => {
-                    println!("The close button was pressed; stopping");
-                    *control_flow = ControlFlow::Exit
+                Event::WindowEvent { event, .. } => {
+                    if matches!(event, WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                ..
+                            },
+                        ..
+                    }) {
+                        println!("The close button was pressed; stopping");
+                        *control_flow = ControlFlow::Exit
+                    }
                 }
                 Event::MainEventsCleared => {
                     // Application update code.
