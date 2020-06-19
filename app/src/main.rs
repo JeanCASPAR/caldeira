@@ -1,13 +1,10 @@
 #![allow(unused_variables)]
 
-use std::f32::consts::PI;
 use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use ash::version::DeviceV1_0;
 use ash::vk;
-
-use rand::{distributions::Uniform, seq::SliceRandom, thread_rng, Rng};
 
 use winit::event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
@@ -101,10 +98,7 @@ fn main() {
             .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
             .image_info(&image_infos);
-        let descriptor_writes = [
-            descriptor_write_1.build(),
-            descriptor_write_2.build(),
-        ];
+        let descriptor_writes = [descriptor_write_1.build(), descriptor_write_2.build()];
 
         unsafe {
             device
