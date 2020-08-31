@@ -6,7 +6,7 @@ use std::path::Path;
 use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::{util, vk};
 
-use crate::vulkan::{Device, Instance};
+use crate::vulkan::{Device, Instance, QueueCreateInfo, QueueFamily};
 
 /// Free an iterator of *const c_char allocated by a CString and getted by using CString::into_raw() method
 /// # Safety
@@ -55,6 +55,38 @@ pub fn find_queue_families(
     }
 
     queue_family_indices
+}
+
+pub fn find_queue_families2<
+    F: FnMut(QueueFamily, &[(usize, QueueCreateInfo)]) -> Option<QueueCreateInfo>,
+>(
+    mut queue_finder: F,
+    instance: &Instance,
+    physical_device: vk::PhysicalDevice,
+) -> Vec<(usize, QueueCreateInfo)> {
+    let mut queue_family_infos = Vec::new();
+
+    let queue_families = unsafe {
+        instance
+            .instance
+            .get_physical_device_queue_family_properties(physical_device)
+    }
+    .into_iter()
+    .enumerate()
+    .map(|(index, property)| QueueFamily {
+        index,
+        property,
+        physical_device,
+    });
+
+    for queue_family in queue_families.into_iter() {
+        let index = queue_family.index();
+        if let Some(queue_create_info) = queue_finder(queue_family, &queue_family_infos) {
+            queue_family_infos.push((index, queue_create_info));
+        }
+    }
+
+    queue_family_infos
 }
 
 pub fn read_file<P: AsRef<Path>>(path: P) -> Vec<u32> {

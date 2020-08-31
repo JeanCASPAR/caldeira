@@ -8,19 +8,18 @@ use super::{DescriptorSetLayout, Device};
 use crate::utils;
 
 pub struct ComputePipeline {
-    pub compute_pipeline: vk::Pipeline,
-    pub pipeline_layout: vk::PipelineLayout,
+    pub pipeline: vk::Pipeline,
+    pub layout: vk::PipelineLayout,
     _device: Rc<Device>,
 }
 
 impl ComputePipeline {
     pub fn new(descriptor_set_layouts: &[DescriptorSetLayout], device: Rc<Device>) -> Self {
-        let (compute_pipeline, pipeline_layout) =
-            Self::create_compute_pipeline(descriptor_set_layouts, &device);
+        let (pipeline, layout) = Self::create_compute_pipeline(descriptor_set_layouts, &device);
 
         Self {
-            compute_pipeline,
-            pipeline_layout,
+            pipeline,
+            layout,
             _device: device,
         }
     }
@@ -84,12 +83,10 @@ impl ComputePipeline {
 impl Drop for ComputePipeline {
     fn drop(&mut self) {
         unsafe {
+            self._device.device.destroy_pipeline(self.pipeline, None);
             self._device
                 .device
-                .destroy_pipeline(self.compute_pipeline, None);
-            self._device
-                .device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
+                .destroy_pipeline_layout(self.layout, None);
         }
     }
 }

@@ -5,7 +5,10 @@ use std::os::raw::c_char;
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 
-use crate::consts::{INSTANCE_EXTENSIONS, VALIDATION_LAYERS};
+use crate::consts::{
+    INSTANCE_EXTENSIONS, REQUIRED_MAJOR, REQUIRED_MINOR, REQUIRED_PATCH, REQUIRED_VERSION,
+    VALIDATION_LAYERS,
+};
 use crate::utils;
 
 pub struct Instance {
@@ -16,16 +19,32 @@ pub struct Instance {
 impl Instance {
     pub fn new() -> Self {
         let entry = ash::Entry::new().expect("failed to load vulkan");
-        let version = entry.try_enumerate_instance_version().unwrap().unwrap();
+        let version = entry
+            .try_enumerate_instance_version()
+            .unwrap()
+            .unwrap_or(vk::make_version(1, 0, 0)); // If vulkan 1.1 is not supported, this functions is not present
 
-        let application_name = CString::new("Vulkan tutorial").unwrap();
-        let engine_name = CString::new("No engine").unwrap();
+        let major = vk::version_major(version);
+        let minor = vk::version_minor(version);
+        let patch = vk::version_patch(version);
+
+        println!("Vulkan version: {}.{}.{}", major, minor, patch);
+
+        if major < REQUIRED_MAJOR || minor < REQUIRED_MINOR || patch < REQUIRED_PATCH {
+            panic!(
+                "The minimum required version is {}.{}.{} and device version is {}.{}.{}",
+                REQUIRED_MAJOR, REQUIRED_MINOR, REQUIRED_PATCH, major, minor, patch
+            );
+        }
+
+        let application_name = CString::new("Test").unwrap();
+        let engine_name = CString::new("Caldeira").unwrap();
         let app_info = vk::ApplicationInfo::builder()
             .application_name(&application_name)
             .application_version(vk::make_version(0, 1, 0))
             .engine_name(&engine_name)
             .engine_version(vk::make_version(0, 1, 0))
-            .api_version(version);
+            .api_version(REQUIRED_VERSION);
 
         let extension_names = Self::check_instance_extensions(&entry)
             .expect("instance extensions requested, but not available!");

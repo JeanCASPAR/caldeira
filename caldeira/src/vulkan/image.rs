@@ -5,11 +5,11 @@ use ash::vk;
 
 use image::RgbaImage;
 
-use super::{Buffer, CommandPool, Device, Instance, SingleTimeCommand};
+use super::{Buffer, Device, Instance};
 use crate::utils;
 
 pub struct Image {
-    pub image: vk::Image,
+    pub handle: vk::Image,
     pub memory: vk::DeviceMemory,
     pub extent: vk::Extent3D,
     pub layout: vk::ImageLayout,
@@ -29,14 +29,14 @@ impl Image {
         device: Rc<Device>,
         instance: &Instance,
     ) -> Self {
-        let (image, memory, extent) = Self::create_image(
+        let (handle, memory, extent) = Self::create_image(
             width, height, format, tiling, usage, properties, &device, instance,
         );
-        let view = Self::create_image_view(image, format, aspect_flags, &device);
+        let view = Self::create_image_view(handle, format, aspect_flags, &device);
         let layout = vk::ImageLayout::UNDEFINED;
 
         Self {
-            image,
+            handle,
             memory,
             extent,
             layout,
@@ -95,7 +95,7 @@ impl Image {
         device: Rc<Device>,
         instance: &Instance,
     ) -> Self {
-        let (image, memory, extent) = Self::create_image(
+        let (handle, memory, extent) = Self::create_image(
             width,
             height,
             format,
@@ -109,7 +109,7 @@ impl Image {
         let view = vk::ImageView::null();
 
         Self {
-            image,
+            handle,
             memory,
             extent,
             layout,
@@ -170,12 +170,107 @@ impl Image {
         (image, memory, extent)
     }
 
-    pub fn transition_layout(&mut self, new_layout: vk::ImageLayout, command_pool: &CommandPool) {
-        if self.layout == new_layout {
-            return;
-        }
+    // pub fn transition_layout(
+    //     &mut self,
+    //     new_layout: vk::ImageLayout,
+    //     command_buffer: &mut CommandBufferRecorder<'_>,
+    // ) {
+    //     if self.layout == new_layout {
+    //         return;
+    //     }
 
-        let command_buffer = SingleTimeCommand::new(&self.device, &command_pool);
+    //     let subresource_range = vk::ImageSubresourceRange::builder()
+    //         .aspect_mask(vk::ImageAspectFlags::COLOR)
+    //         .base_mip_level(0)
+    //         .level_count(1)
+    //         .base_array_layer(0)
+    //         .layer_count(1)
+    //         .build();
+
+    //     let (src_access_mask, src_stage_mask) = match self.layout {
+    //         vk::ImageLayout::UNDEFINED => (
+    //             vk::AccessFlags::empty(),
+    //             vk::PipelineStageFlags::TOP_OF_PIPE,
+    //         ),
+    //         vk::ImageLayout::TRANSFER_DST_OPTIMAL => (
+    //             vk::AccessFlags::TRANSFER_WRITE,
+    //             vk::PipelineStageFlags::TRANSFER,
+    //         ),
+    //         vk::ImageLayout::GENERAL => {
+    //             (vk::AccessFlags::all(), vk::PipelineStageFlags::ALL_COMMANDS)
+    //         }
+
+    //         _ => panic!("Unsupported layout transition"),
+    //     };
+
+    //     let (dst_access_mask, dst_stage_mask) = match new_layout {
+    //         vk::ImageLayout::TRANSFER_DST_OPTIMAL => (
+    //             vk::AccessFlags::TRANSFER_WRITE,
+    //             vk::PipelineStageFlags::TRANSFER,
+    //         ),
+    //         vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL => (
+    //             vk::AccessFlags::SHADER_READ,
+    //             vk::PipelineStageFlags::FRAGMENT_SHADER,
+    //         ),
+    //         vk::ImageLayout::GENERAL => {
+    //             (vk::AccessFlags::all(), vk::PipelineStageFlags::ALL_COMMANDS)
+    //         }
+    //         vk::ImageLayout::TRANSFER_SRC_OPTIMAL => (
+    //             vk::AccessFlags::TRANSFER_READ,
+    //             vk::PipelineStageFlags::TRANSFER,
+    //         ),
+
+    //         _ => panic!("Unsupported layout transition"),
+    //     };
+
+    //     let barrier = vk::ImageMemoryBarrier::builder()
+    //         .old_layout(self.layout)
+    //         .new_layout(new_layout)
+    //         .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+    //         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+    //         .image(self.handle)
+    //         .subresource_range(subresource_range)
+    //         .src_access_mask(src_access_mask)
+    //         .dst_access_mask(dst_access_mask);
+
+    //     unsafe {
+    //         let memory_barriers = [];
+    //         let buffer_memory_barriers = [];
+    //         let image_memory_barriers = [barrier.build()];
+
+    //         self.device.device.cmd_pipeline_barrier(
+    //             command_buffer.command_buffer,
+    //             src_stage_mask,
+    //             dst_stage_mask,
+    //             vk::DependencyFlags::empty(),
+    //             &memory_barriers,
+    //             &buffer_memory_barriers,
+    //             &image_memory_barriers,
+    //         );
+    //     }
+
+    //     self.layout = new_layout;
+    // }
+
+    /// Return all src_stage_mask, dst_stage_mask, depency_flags and the image memory barrier
+    /// This functions set the new layout, and therefore the transition is considered done
+    pub fn transition_layout(
+        &mut self,
+        new_layout: vk::ImageLayout,
+    ) -> (
+        vk::PipelineStageFlags,
+        vk::PipelineStageFlags,
+        vk::DependencyFlags,
+        vk::ImageMemoryBarrierBuilder<'_>,
+    ) {
+        if self.layout == new_layout {
+            return (
+                vk::PipelineStageFlags::empty(),
+                vk::PipelineStageFlags::empty(),
+                vk::DependencyFlags::empty(),
+                vk::ImageMemoryBarrier::builder(),
+            );
+        }
 
         let subresource_range = vk::ImageSubresourceRange::builder()
             .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -226,30 +321,35 @@ impl Image {
             .new_layout(new_layout)
             .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
             .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .image(self.image)
+            .image(self.handle)
             .subresource_range(subresource_range)
             .src_access_mask(src_access_mask)
             .dst_access_mask(dst_access_mask);
 
-        unsafe {
-            let memory_barriers = [];
-            let buffer_memory_barriers = [];
-            let image_memory_barriers = [barrier.build()];
+        // unsafe {
+        //     let memory_barriers = [];
+        //     let buffer_memory_barriers = [];
+        //     let image_memory_barriers = [barrier.build()];
 
-            self.device.device.cmd_pipeline_barrier(
-                command_buffer.command_buffer,
-                src_stage_mask,
-                dst_stage_mask,
-                vk::DependencyFlags::empty(),
-                &memory_barriers,
-                &buffer_memory_barriers,
-                &image_memory_barriers,
-            );
-        }
+        //     self.device.device.cmd_pipeline_barrier(
+        //         command_buffer.command_buffer,
+        //         src_stage_mask,
+        //         dst_stage_mask,
+        //         vk::DependencyFlags::empty(),
+        //         &memory_barriers,
+        //         &buffer_memory_barriers,
+        //         &image_memory_barriers,
+        //     );
+        // }
 
         self.layout = new_layout;
 
-        command_buffer.submit();
+        (
+            src_stage_mask,
+            dst_stage_mask,
+            vk::DependencyFlags::empty(),
+            barrier,
+        )
     }
 
     fn create_image_view(
@@ -276,86 +376,80 @@ impl Image {
             .expect("failed to create texture image view!")
     }
 
-    pub fn copy_to_buffer(&self, dst: &mut Buffer, command_pool: &CommandPool) {
-        let command_buffer = SingleTimeCommand::new(&self.device, command_pool);
+    // pub fn copy_to_buffer(&self, dst: &mut Buffer, command_buffer: &mut CommandBufferRecorder<'_>) {
+    //     let image_subresource = vk::ImageSubresourceLayers::builder()
+    //         .aspect_mask(vk::ImageAspectFlags::COLOR)
+    //         .mip_level(0)
+    //         .base_array_layer(0)
+    //         .layer_count(1)
+    //         .build();
 
-        let image_subresource = vk::ImageSubresourceLayers::builder()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .mip_level(0)
-            .base_array_layer(0)
-            .layer_count(1)
-            .build();
+    //     let image_offset = vk::Offset3D::builder().x(0).y(0).z(0).build();
 
-        let image_offset = vk::Offset3D::builder().x(0).y(0).z(0).build();
+    //     let buffer_image_copy = vk::BufferImageCopy::builder()
+    //         .buffer_offset(0)
+    //         .buffer_row_length(0)
+    //         .buffer_image_height(0)
+    //         .image_subresource(image_subresource)
+    //         .image_offset(image_offset)
+    //         .image_extent(self.extent)
+    //         .build();
+    //     let regions = [buffer_image_copy];
 
-        let buffer_image_copy = vk::BufferImageCopy::builder()
-            .buffer_offset(0)
-            .buffer_row_length(0)
-            .buffer_image_height(0)
-            .image_subresource(image_subresource)
-            .image_offset(image_offset)
-            .image_extent(self.extent)
-            .build();
-        let regions = [buffer_image_copy];
+    //     unsafe {
+    //         self.device.device.cmd_copy_image_to_buffer(
+    //             command_buffer.command_buffer,
+    //             self.handle,
+    //             self.layout,
+    //             dst.handle,
+    //             &regions,
+    //         );
+    //     }
+    // }
 
-        unsafe {
-            self.device.device.cmd_copy_image_to_buffer(
-                command_buffer.command_buffer,
-                self.image,
-                self.layout,
-                dst.buffer,
-                &regions,
-            );
-        }
+    // pub fn copy_to_image(&self, dst: &mut Image, command_buffer: &mut CommandBufferRecorder<'_>) {
+    //     let subresource = vk::ImageSubresourceLayers::builder()
+    //         .aspect_mask(vk::ImageAspectFlags::COLOR)
+    //         .mip_level(0)
+    //         .base_array_layer(0)
+    //         .layer_count(1)
+    //         .build();
 
-        command_buffer.submit();
-    }
+    //     let offset = vk::Offset3D::builder().x(0).y(0).z(0).build();
 
-    pub fn copy_to_image(&self, dst: &mut Image, command_pool: &CommandPool) {
-        let command_buffer = SingleTimeCommand::new(&self.device, command_pool);
+    //     let image_copy = vk::ImageCopy::builder()
+    //         .src_offset(offset)
+    //         .src_subresource(subresource)
+    //         .dst_offset(offset)
+    //         .dst_subresource(subresource)
+    //         .extent(self.extent)
+    //         .build();
+    //     let regions = [image_copy];
 
-        let subresource = vk::ImageSubresourceLayers::builder()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .mip_level(0)
-            .base_array_layer(0)
-            .layer_count(1)
-            .build();
+    //     if dst.layout != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
+    //         dst.transition_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL, command_pool);
+    //     }
 
-        let offset = vk::Offset3D::builder().x(0).y(0).z(0).build();
+    //     unsafe {
+    //         self.device.device.cmd_copy_image(
+    //             command_buffer.command_buffer,
+    //             self.handle,
+    //             self.layout,
+    //             dst.handle,
+    //             dst.layout,
+    //             &regions,
+    //         );
+    //     }
 
-        let image_copy = vk::ImageCopy::builder()
-            .src_offset(offset)
-            .src_subresource(subresource)
-            .dst_offset(offset)
-            .dst_subresource(subresource)
-            .extent(self.extent)
-            .build();
-        let regions = [image_copy];
-
-        if dst.layout != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
-            dst.transition_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL, command_pool);
-        }
-
-        unsafe {
-            self.device.device.cmd_copy_image(
-                command_buffer.command_buffer,
-                self.image,
-                self.layout,
-                dst.image,
-                dst.layout,
-                &regions,
-            );
-        }
-
-        command_buffer.submit();
-    }
+    //     command_buffer.submit();
+    // }
 }
 
 impl Drop for Image {
     fn drop(&mut self) {
         unsafe {
             self.device.device.destroy_image_view(self.view, None);
-            self.device.device.destroy_image(self.image, None);
+            self.device.device.destroy_image(self.handle, None);
             self.device.device.free_memory(self.memory, None);
         }
     }

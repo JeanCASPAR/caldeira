@@ -35,5 +35,19 @@ unsafe impl<T: ByteCopiable> ByteCopiable for [T; 7] {}
 unsafe impl<T: ByteCopiable> ByteCopiable for [T; 8] {}
 unsafe impl<T: ByteCopiable> ByteCopiable for [T; 9] {}
 unsafe impl<T: ByteCopiable> ByteCopiable for [T; 10] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 11] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 12] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 13] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 14] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 15] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 16] {}
+
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 32] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 64] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 128] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 256] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 512] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 1024] {}
+unsafe impl<T: ByteCopiable> ByteCopiable for [T; 2048] {}
 
 unsafe impl<A: ByteCopiable, B: ByteCopiable> ByteCopiable for (A, B) {}

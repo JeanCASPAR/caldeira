@@ -22,9 +22,35 @@ fn main() {
     #[cfg(feature = "validation-layers")]
     let debug = vulkan::Debug::new(Rc::clone(&instance));
 
-    let device = Rc::new(vulkan::Device::new(Rc::clone(&instance)));
+    let (device, mut queues) = vulkan::Device::new(
+        |queue_family, _| {
+            if queue_family.support_compute() {
+                let create_info = vulkan::QueueCreateInfo::new(vec![1.0]);
 
-    let command_pool = vulkan::CommandPool::new(&instance, Rc::clone(&device));
+                Some(create_info)
+            } else {
+                None
+            }
+        },
+        Rc::clone(&instance),
+    );
+
+    let mut compute_queue = queues.swap_remove(0).swap_remove(0);
+
+    let mut command_pool = Rc::new(vulkan::CommandPool::new(
+        compute_queue.family(),
+        Rc::clone(&device),
+    ));
+
+    // let command_buffer = vulkan::SingleTimeCommand::new(&device, &command_pool); // TODO: utiliser des command buffers alloués normalement et stockés
+
+    let mut command_buffers = command_pool
+        .allocate_command_buffers(vk::CommandBufferLevel::PRIMARY, 3)
+        .into_iter()
+        .map(|command_buffer| command_buffer.begin(vk::CommandBufferUsageFlags::empty()))
+        .collect::<Vec<_>>();
+
+    let command_buffer = &mut command_buffers[0];
 
     let descriptor_set_layout = vulkan::DescriptorSetLayoutBuilder::new()
         .with_binding(
@@ -65,7 +91,28 @@ fn main() {
 
     let mut output_image = vulkan::Image::new_storage(1_000, 1_000, Rc::clone(&device), &instance);
 
-    output_image.transition_layout(vk::ImageLayout::GENERAL, &command_pool);
+    let (src_stage_mask, dst_stage_mask, dependency_flags, barrier) =
+        output_image.transition_layout(vk::ImageLayout::GENERAL);
+
+    let image_memory_barriers = [barrier.build()];
+
+    command_buffer.as_generic().pipeline_barrier(
+        src_stage_mask,
+        dst_stage_mask,
+        dependency_flags,
+        &[],
+        &[],
+        &image_memory_barriers,
+    );
+
+    let command_buffer = command_buffers.swap_remove(0).end();
+
+    let submits = [vulkan::QueueSubmission::builder()
+        .with_command_buffer(&command_buffer)
+        .build()];
+
+    compute_queue.submit(&submits, None);
+    compute_queue.wait_idle();
 
     let descriptor_pool = vulkan::DescriptorPoolBuilder::new()
         .with(vk::DescriptorType::STORAGE_BUFFER, 1)
@@ -76,13 +123,13 @@ fn main() {
 
     {
         let buffer_info_1 = vk::DescriptorBufferInfo::builder()
-            .buffer(buffer.buffer)
+            .buffer(buffer.handle)
             .offset(0)
             .range(4);
         let buffer_infos = [buffer_info_1.build()];
 
         let image_info = vk::DescriptorImageInfo::builder()
-            .image_layout(output_image.layout)
+            .image_layout(output_image.layout) // Problème de synchronisation : le layout correspond pas encore vu que le command buffer est pas submit
             .image_view(output_image.view);
         let image_infos = [image_info.build()];
 
@@ -107,30 +154,53 @@ fn main() {
         }
     }
 
-    let command_buffer = vulkan::SingleTimeCommand::new(&device, &command_pool); // TODO: utiliser des command buffers alloués normalement et stockés
+    let command_buffer = &mut command_buffers[0];
 
-    unsafe {
-        device.device.cmd_bind_pipeline(
-            command_buffer.command_buffer,
-            vk::PipelineBindPoint::COMPUTE,
-            compute_pipeline.compute_pipeline,
-        );
+    command_buffer
+        .as_generic()
+        .as_generic_compute()
+        .unwrap()
+        .bind_pipeline(&compute_pipeline)
+        .bind_descriptor_sets(&descriptor_sets, None)
+        .unwrap();
 
-        device.device.cmd_bind_descriptor_sets(
-            command_buffer.command_buffer,
-            vk::PipelineBindPoint::COMPUTE,
-            compute_pipeline.pipeline_layout,
-            0,
-            &descriptor_sets,
-            &[],
-        );
+    command_buffer
+        .as_compute_command_buffer()
+        .unwrap()
+        .dispatch(100, 100, 1)
+        .unwrap();
 
-        device
-            .device
-            .cmd_dispatch(command_buffer.command_buffer, 100, 100, 1);
+    // unsafe {
+    //     device.device.cmd_bind_pipeline(
+    //         command_buffer.command_buffer,
+    //         vk::PipelineBindPoint::COMPUTE,
+    //         compute_pipeline.pipeline,
+    //     );
 
-        command_buffer.submit();
-    }
+    //     device.device.cmd_bind_descriptor_sets(
+    //         command_buffer.command_buffer,
+    //         vk::PipelineBindPoint::COMPUTE,
+    //         compute_pipeline.layout,
+    //         0,
+    //         &descriptor_sets,
+    //         &[],
+    //     );
+
+    //     device
+    //         .device
+    //         .cmd_dispatch(command_buffer.command_buffer, 100, 100, 1);
+
+    //     command_buffer.submit();
+    // }
+
+    let command_buffer = command_buffers.swap_remove(0).end();
+
+    let submits = [vulkan::QueueSubmission::builder()
+        .with_command_buffer(&command_buffer)
+        .build()];
+
+    compute_queue.submit(&submits, None);
+    compute_queue.wait_idle();
 
     let output = {
         let mut output = 0;
@@ -154,8 +224,59 @@ fn main() {
             &instance,
         );
 
-        output_image.transition_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL, &command_pool);
-        output_image.copy_to_buffer(&mut staging_buffer, &command_pool);
+        let command_buffer = &mut command_buffers[0];
+
+        let (src_stage_mask, dst_stage_mask, dependency_flags, barrier) =
+            output_image.transition_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL);
+        let image_memory_barriers = [barrier.build()];
+
+        command_buffer.as_generic().pipeline_barrier(
+            src_stage_mask,
+            dst_stage_mask,
+            dependency_flags,
+            &[],
+            &[],
+            &image_memory_barriers,
+        );
+
+        let regions = [{
+            let image_subresource = vk::ImageSubresourceLayers::builder()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .mip_level(0)
+                .base_array_layer(0)
+                .layer_count(1)
+                .build();
+
+            let image_offset = vk::Offset3D::builder().x(0).y(0).z(0).build();
+
+            let buffer_image_copy = vk::BufferImageCopy::builder()
+                .buffer_offset(0)
+                .buffer_row_length(0)
+                .buffer_image_height(0)
+                .image_subresource(image_subresource)
+                .image_offset(image_offset)
+                .image_extent(output_image.extent);
+
+            buffer_image_copy.build()
+        }];
+
+        command_buffer
+            .as_transfer_command_buffer()
+            .unwrap()
+            .as_copy()
+            .copy_image_to_buffer(&output_image, &mut staging_buffer, &regions)
+            .unwrap();
+
+        // output_image.copy_to_buffer(&mut staging_buffer, &command_pool);
+
+        let command_buffer = command_buffers.swap_remove(0).end();
+
+        let submits = [vulkan::QueueSubmission::builder()
+            .with_command_buffer(&command_buffer)
+            .build()];
+
+        compute_queue.submit(&submits, None);
+        compute_queue.wait_idle();
 
         staging_buffer.get_data(&mut pixels[..], 0);
 

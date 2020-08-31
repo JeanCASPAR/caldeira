@@ -1,3 +1,11 @@
+use ash::vk;
+
+pub const REQUIRED_VERSION: u32 = vk::make_version(1, 2, 0);
+
+pub const REQUIRED_MAJOR: u32 = vk::version_major(REQUIRED_VERSION);
+pub const REQUIRED_MINOR: u32 = vk::version_minor(REQUIRED_VERSION);
+pub const REQUIRED_PATCH: u32 = vk::version_patch(REQUIRED_VERSION);
+
 pub const WIDTH: usize = 800;
 pub const HEIGHT: usize = 600;
 
