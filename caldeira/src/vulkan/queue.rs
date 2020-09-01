@@ -39,17 +39,6 @@ impl Queue {
         unsafe { self.device.device.queue_wait_idle(self.handle) }.unwrap()
     }
 
-    // pub fn submit(&mut self, submits: &[vk::SubmitInfo], fence: Option<vk::Fence>) {
-    //     let fence = fence.unwrap_or_default();
-
-    //     unsafe {
-    //         self.device
-    //             .device
-    //             .queue_submit(self.handle, &submits, fence)
-    //     }
-    //     .unwrap();
-    // }
-
     pub fn submit(&mut self, submits: &[QueueSubmission<'_>], fence: Option<vk::Fence>) {
         let mut submit_info_builders = Vec::with_capacity(submits.len());
         let fence = fence.unwrap_or_default();

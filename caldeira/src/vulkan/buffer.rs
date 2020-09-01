@@ -108,63 +108,6 @@ impl Buffer {
             self.device.device.unmap_memory(self.memory);
         }
     }
-
-    // pub fn copy_to_buffer(&self, dst: &mut Self, size: vk::DeviceSize, command_pool: &CommandPool) {
-    //     let command_buffer = SingleTimeCommand::new(&self.device, command_pool);
-
-    //     let buffer_copy = vk::BufferCopy::builder().size(size);
-    //     let regions = [buffer_copy.build()];
-
-    //     unsafe {
-    //         self.device.device.cmd_copy_buffer(
-    //             command_buffer.command_buffer,
-    //             self.handle,
-    //             dst.handle,
-    //             &regions,
-    //         );
-    //     }
-
-    //     command_buffer.submit();
-    // }
-
-    // pub fn copy_to_image(&self, dst: &mut Image, command_pool: &CommandPool) {
-    //     let command_buffer = SingleTimeCommand::new(&self.device, command_pool);
-
-    //     let image_subresource = vk::ImageSubresourceLayers::builder()
-    //         .aspect_mask(vk::ImageAspectFlags::COLOR)
-    //         .mip_level(0)
-    //         .base_array_layer(0)
-    //         .layer_count(1)
-    //         .build();
-
-    //     let image_offset = vk::Offset3D::builder().x(0).y(0).z(0).build();
-
-    //     let region = vk::BufferImageCopy::builder()
-    //         .buffer_offset(0)
-    //         .buffer_row_length(0)
-    //         .buffer_image_height(0)
-    //         .image_subresource(image_subresource)
-    //         .image_offset(image_offset)
-    //         .image_extent(dst.extent)
-    //         .build();
-    //     let regions = [region];
-
-    //     if dst.layout != vk::ImageLayout::TRANSFER_DST_OPTIMAL {
-    //         dst.transition_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL, command_pool);
-    //     }
-
-    //     unsafe {
-    //         self.device.device.cmd_copy_buffer_to_image(
-    //             command_buffer.command_buffer,
-    //             self.handle,
-    //             dst.handle,
-    //             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-    //             &regions,
-    //         );
-    //     }
-
-    //     command_buffer.submit();
-    // }
 }
 
 impl Drop for Buffer {

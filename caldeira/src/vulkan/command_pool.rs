@@ -1,435 +1,3 @@
-// use std::rc::Rc;
-
-// use ash::version::DeviceV1_0;
-// use ash::vk;
-
-// use super::{Device, Instance};
-// use crate::utils;
-
-// pub struct CommandPool {
-//     command_pool: vk::CommandPool,
-//     device: Rc<Device>,
-// }
-
-// impl CommandPool {
-//     pub fn new(instance: &Instance, device: Rc<Device>) -> Self {
-//         let command_pool = Self::create_command_pool(instance, &device);
-
-//         Self {
-//             command_pool,
-//             device,
-//         }
-//     }
-
-//     fn create_command_pool(instance: &Instance, device: &Device) -> vk::CommandPool {
-//         let queue_family_indices = utils::find_queue_families(instance, device.physical_device);
-
-//         let pool_info = vk::CommandPoolCreateInfo::builder()
-//             .queue_family_index(queue_family_indices.compute_family.unwrap());
-
-//         unsafe { device.device.create_command_pool(&pool_info, None) }
-//             .expect("failed to create command pool!")
-//     }
-// }
-
-// impl Drop for CommandPool {
-//     fn drop(&mut self) {
-//         unsafe {
-//             self.device
-//                 .device
-//                 .destroy_command_pool(self.command_pool, None);
-//         }
-//     }
-// }
-
-// #[must_use = "SingleTimeCommand should be used with .submit() method"]
-// pub struct SingleTimeCommand<'a> {
-//     pub command_buffer: vk::CommandBuffer,
-//     command_pool: &'a CommandPool,
-//     device: &'a Device,
-// }
-
-// impl<'a> SingleTimeCommand<'a> {
-//     pub fn new(device: &'a Device, command_pool: &'a CommandPool) -> Self {
-//         let command_buffer = Self::begin_single_time_command(&device, command_pool.command_pool);
-
-//         Self {
-//             command_buffer,
-//             command_pool,
-//             device,
-//         }
-//     }
-
-//     pub fn submit(self) {
-//         Self::end_single_time_command(self.command_buffer, &self.device);
-//     }
-
-//     fn begin_single_time_command(
-//         device: &Device,
-//         command_pool: vk::CommandPool,
-//     ) -> vk::CommandBuffer {
-//         let alloc_info = vk::CommandBufferAllocateInfo::builder()
-//             .level(vk::CommandBufferLevel::PRIMARY)
-//             .command_pool(command_pool)
-//             .command_buffer_count(1);
-
-//         let command_buffer =
-//             unsafe { device.device.allocate_command_buffers(&alloc_info) }.unwrap()[0];
-
-//         let begin_info = vk::CommandBufferBeginInfo::builder()
-//             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-//         unsafe {
-//             device
-//                 .device
-//                 .begin_command_buffer(command_buffer, &begin_info)
-//                 .unwrap();
-//         }
-
-//         command_buffer
-//     }
-
-//     fn end_single_time_command(command_buffer: vk::CommandBuffer, device: &Device) {
-//         unsafe {
-//             device.device.end_command_buffer(command_buffer).unwrap();
-//         }
-//         let command_buffers = [command_buffer];
-
-//         let submit_info = vk::SubmitInfo::builder()
-//             .command_buffers(&command_buffers)
-//             .build();
-//         let submits = [submit_info];
-
-//         unsafe {
-//             device
-//                 .device
-//                 .queue_submit(device.compute_queue, &submits, vk::Fence::null())
-//                 .unwrap();
-//             device.device.queue_wait_idle(device.compute_queue).unwrap();
-//         }
-//     }
-// }
-
-// impl Drop for SingleTimeCommand<'_> {
-//     fn drop(&mut self) {
-//         unsafe {
-//             let command_buffers = [self.command_buffer];
-
-//             self.device
-//                 .device
-//                 .free_command_buffers(self.command_pool.command_pool, &command_buffers);
-//         }
-//     }
-// }
-
-// mod a {
-//     use std::marker::PhantomData;
-//     use std::rc::Rc;
-
-//     use ash::version::DeviceV1_0;
-//     use ash::vk;
-
-//     use super::super::{Compute, Device, Graphics, Queue, QueueFamily, Transfer};
-
-//     pub struct CommandPool<Q: QueueFamily> {
-//         command_pool: vk::CommandPool,
-//         queue_family_index: u32,
-//         device: Rc<Device>,
-//         _phantom: PhantomData<Q>,
-//     }
-
-//     impl<Q: QueueFamily> CommandPool<Q> {
-//         pub fn new(queue_family: Q, device: Rc<Device>) -> Self {
-//             let command_pool = Self::create_command_pool(&queue_family, &device);
-
-//             Self {
-//                 command_pool,
-//                 queue_family_index: queue_family.index(),
-//                 device,
-//                 _phantom: PhantomData,
-//             }
-//         }
-
-//         fn create_command_pool(queue_family: &Q, device: &Device) -> vk::CommandPool {
-//             let pool_info =
-//                 vk::CommandPoolCreateInfo::builder().queue_family_index(queue_family.index());
-
-//             unsafe { device.device.create_command_pool(&pool_info, None) }
-//                 .expect("failed to create command pool!")
-//         }
-
-//         pub fn allocate_command_buffers(
-//             self: Rc<Self>,
-//             // level: vk::CommandBufferLevel,
-//             count: usize,
-//         ) -> Vec<InitialStateCommandBuffer<Q>> {
-//             let alloc_info = vk::CommandBufferAllocateInfo::builder()
-//                 .command_pool(self.command_pool)
-//                 .level(vk::CommandBufferLevel::PRIMARY)
-//                 // .level(level)
-//                 .command_buffer_count(count as _);
-
-//             unsafe { self.device.device.allocate_command_buffers(&alloc_info) }
-//                 .expect("failed to allocate command buffers")
-//                 .into_iter()
-//                 .map(|command_buffer| CommandBuffer {
-//                     command_buffer,
-//                     // level,
-//                     state: CommandBufferState::Initial,
-//                     flags: vk::CommandBufferUsageFlags::empty(),
-//                     command_pool: Rc::clone(&self),
-//                     device: Rc::clone(&self.device),
-//                 })
-//                 .map(InitialStateCommandBuffer)
-//                 .collect()
-//         }
-//     }
-
-//     impl<Q: QueueFamily> Drop for CommandPool<Q> {
-//         fn drop(&mut self) {
-//             unsafe {
-//                 self.device
-//                     .device
-//                     .destroy_command_pool(self.command_pool, None);
-//             }
-//         }
-//     }
-
-//     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-//     pub enum CommandBufferState {
-//         Initial,
-//         Recording,
-//         Executable,
-//         Pending,
-//         Invalid,
-//     }
-
-//     pub struct CommandBuffer<Q: QueueFamily> {
-//         command_buffer: vk::CommandBuffer,
-//         // level: vk::CommandBufferLevel,
-//         flags: vk::CommandBufferUsageFlags,
-//         state: CommandBufferState,
-//         command_pool: Rc<CommandPool<Q>>,
-//         device: Rc<Device>,
-//     }
-
-//     impl<Q: QueueFamily> CommandBuffer<Q> {
-//         pub fn state(&self) -> CommandBufferState {
-//             self.state
-//         }
-
-//         // pub fn begin_command_buffer(&mut self, flags: vk::CommandBufferUsageFlags) -> &mut Self {
-//         //     debug_assert!(self.state == CommandBufferState::Initial);
-
-//         //     self.state = CommandBufferState::Recording;
-
-//         //     let begin_info = vk::CommandBufferBeginInfo::builder().flags(flags);
-
-//         //     unsafe {
-//         //         self.device
-//         //             .device
-//         //             .begin_command_buffer(self.command_buffer, &begin_info)
-//         //     }
-//         //     .unwrap();
-
-//         //     self
-//         // }
-
-//         // pub fn end_command_buffer(&mut self) -> &mut Self {
-//         //     debug_assert!(self.state == CommandBufferState::Recording);
-
-//         //     self.state = CommandBufferState::Executable;
-
-//         //     unsafe { self.device.device.end_command_buffer(self.command_buffer) }.unwrap();
-
-//         //     self
-//         // }
-//     }
-
-//     pub struct InitialStateCommandBuffer<Q: QueueFamily>(CommandBuffer<Q>);
-
-//     impl<Q: QueueFamily> InitialStateCommandBuffer<Q> {
-//         pub fn as_command_buffer(&self) -> &CommandBuffer<Q> {
-//             &self.0
-//         }
-
-//         pub fn begin(mut self, flags: vk::CommandBufferUsageFlags) -> CommandBufferRecorder<Q> {
-//             self.0.state = CommandBufferState::Recording;
-//             self.0.flags = flags;
-
-//             let begin_info = vk::CommandBufferBeginInfo::builder().flags(flags);
-
-//             unsafe {
-//                 self.0
-//                     .device
-//                     .device
-//                     .begin_command_buffer(self.0.command_buffer, &begin_info)
-//             }
-//             .unwrap();
-
-//             CommandBufferRecorder(self.0)
-//         }
-//     }
-
-//     pub struct CommandBufferRecorder<Q: QueueFamily>(CommandBuffer<Q>);
-
-//     impl<Q: QueueFamily> CommandBufferRecorder<Q> {
-//         pub fn as_command_buffer(&self) -> &CommandBuffer<Q> {
-//             &self.0
-//         }
-
-//         pub fn reset(mut self) -> InitialStateCommandBuffer<Q> {
-//             self.0.state = CommandBufferState::Initial;
-
-//             unsafe {
-//                 self.0
-//                     .device
-//                     .device
-//                     .reset_command_buffer(
-//                         self.0.command_buffer,
-//                         vk::CommandBufferResetFlags::RELEASE_RESOURCES,
-//                     )
-//                     .unwrap();
-//             }
-
-//             InitialStateCommandBuffer(self.0)
-//         }
-
-//         pub fn end(mut self) -> ExecutableCommandBuffer<'static, 'static, Q> {
-//             self.0.state = CommandBufferState::Executable;
-
-//             unsafe {
-//                 self.0
-//                     .device
-//                     .device
-//                     .end_command_buffer(self.0.command_buffer)
-//             }
-//             .unwrap();
-
-//             ExecutableCommandBuffer(self.0, PhantomData)
-//         }
-//     }
-
-//     pub struct ExecutableCommandBuffer<'a, 'b, Q: QueueFamily>(
-//         CommandBuffer<Q>,
-//         PhantomData<(&'a (), &'b ())>,
-//     );
-
-//     impl<'a, 'b, Q: QueueFamily> ExecutableCommandBuffer<'a, 'b, Q> {
-//         pub fn as_command_buffer(&self) -> &CommandBuffer<Q> {
-//             &self.0
-//         }
-
-//         pub fn reset(mut self) -> InitialStateCommandBuffer<Q> {
-//             self.0.state = CommandBufferState::Initial;
-
-//             unsafe {
-//                 self.0
-//                     .device
-//                     .device
-//                     .reset_command_buffer(
-//                         self.0.command_buffer,
-//                         vk::CommandBufferResetFlags::RELEASE_RESOURCES,
-//                     )
-//                     .unwrap();
-//             }
-
-//             InitialStateCommandBuffer(self.0)
-//         }
-
-//         pub fn submit(
-//             mut self,
-//             queue: Queue<Q>,
-//             wait_semaphores: Option<&'a [vk::Semaphore]>,
-//             signal_semaphores: Option<&'b [vk::Semaphore]>,
-//         ) -> PendingCommandBuffer<'a, 'b, Q> {
-//             self.0.state = CommandBufferState::Pending;
-
-//             // TODO: changer pour submit plusieurs commandbuffers d'un coup
-//             let command_buffers = [self.0.command_buffer];
-
-//             let mut submit_info = vk::SubmitInfo::builder().command_buffers(&command_buffers);
-
-//             if let Some(wait_semaphores) = wait_semaphores {
-//                 submit_info = submit_info.wait_semaphores(wait_semaphores);
-//             }
-
-//             if let Some(signal_semaphores) = signal_semaphores {
-//                 submit_info = submit_info.signal_semaphores(signal_semaphores);
-//             }
-
-//             let submits = [submit_info.build()];
-
-//             unsafe {
-//                 self.0
-//                     .device
-//                     .device
-//                     .queue_submit(queue.queue, &submits, vk::Fence::null())
-//                     .unwrap();
-//             }
-
-//             PendingCommandBuffer(self.0, PhantomData)
-//         }
-//     }
-
-//     pub struct PendingCommandBuffer<'a, 'b, Q: QueueFamily>(
-//         CommandBuffer<Q>,
-//         PhantomData<(&'a (), &'b ())>,
-//     );
-
-//     pub type Either<L, R> = Result<L, R>;
-
-//     impl<'a, 'b, Q: QueueFamily> PendingCommandBuffer<'a, 'b, Q> {
-//         pub fn as_command_buffer(&self) -> &CommandBuffer<Q> {
-//             &self.0
-//         }
-
-//         pub unsafe fn assume_ended(
-//             mut self,
-//         ) -> Either<ExecutableCommandBuffer<'a, 'b, Q>, InvalidCommandBuffer<Q>> {
-//             if self
-//                 .0
-//                 .flags
-//                 .contains(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
-//             {
-//                 self.0.state = CommandBufferState::Invalid;
-
-//                 Err(InvalidCommandBuffer(self.0))
-//             } else {
-//                 self.0.state = CommandBufferState::Initial;
-
-//                 Ok(ExecutableCommandBuffer(self.0, PhantomData))
-//             }
-//         }
-//     }
-
-//     pub struct InvalidCommandBuffer<Q: QueueFamily>(CommandBuffer<Q>);
-
-//     impl<Q: QueueFamily> InvalidCommandBuffer<Q> {
-//         pub fn as_command_buffer(&self) -> &CommandBuffer<Q> {
-//             &self.0
-//         }
-
-//         pub fn reset(mut self) -> InitialStateCommandBuffer<Q> {
-//             self.0.state = CommandBufferState::Initial;
-
-//             unsafe {
-//                 self.0
-//                     .device
-//                     .device
-//                     .reset_command_buffer(
-//                         self.0.command_buffer,
-//                         vk::CommandBufferResetFlags::RELEASE_RESOURCES,
-//                     )
-//                     .unwrap();
-//             }
-
-//             InitialStateCommandBuffer(self.0)
-//         }
-//     }
-// }
-
-// pub mod b {
 use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
@@ -489,9 +57,6 @@ impl CommandPool {
             })
             .collect()
     }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////
-    // C/C from queue.rs
 
     pub fn support_graphics(&self) -> bool {
         self.device
@@ -612,14 +177,11 @@ impl fmt::Display for ClearError {
 
 impl Error for ClearError {}
 
+pub type InlineSubpass =
+    dyn FnOnce(&mut InsideOfRenderpassScope<'_, '_>) -> Result<(), Box<dyn Error + Send + Sync>>;
+
 pub enum Subpass {
-    Inline {
-        callback: Box<
-            dyn FnOnce(
-                &mut InsideOfRenderpassScope<'_, '_>,
-            ) -> Result<(), Box<dyn Error + Send + Sync>>,
-        >,
-    },
+    Inline { callback: Box<InlineSubpass> },
 }
 
 impl Subpass {
@@ -666,8 +228,8 @@ impl CommandBuffer {
 pub struct GenericBindings {}
 
 #[derive(Default)]
-pub struct GraphicsBindings {
-    graphics_pipeline: Option<GraphicsPipeline>,
+pub struct GraphicsBindings<'a> {
+    graphics_pipeline: Option<&'a GraphicsPipeline>,
     index_buffer: bool,
     vertex_buffers: bool,
     descriptors: bool,
@@ -683,7 +245,7 @@ pub struct ComputeBindings<'a> {
 pub struct CommandBufferRecorder<'a> {
     inner: CommandBuffer,
     generic_bindings: GenericBindings,
-    graphics_bindings: GraphicsBindings,
+    graphics_bindings: GraphicsBindings<'a>,
     compute_bindings: ComputeBindings<'a>,
     phantom: std::marker::PhantomData<&'a ()>,
 }
@@ -1035,7 +597,7 @@ impl<'a, 'b: 'a> GraphicsGenericCommands<'a, 'b> {
         Ok(self)
     }
 
-    pub fn bind_pipeline(&mut self, pipeline: GraphicsPipeline) -> &mut Self {
+    pub fn bind_pipeline(&mut self, pipeline: &'b GraphicsPipeline) -> &mut Self {
         let command_buffer = &self.0.inner;
 
         unsafe {
@@ -1645,28 +1207,18 @@ pub struct GraphicsPipeline {
     pub pipeline: vk::Pipeline,
 }
 
-// #[derive(Default)]
-// pub struct GraphicsBindings<'a> {
-//     graphics_pipeline: Option<&'a GraphicsPipeline>,
-//     vertex_buffers: Option<&'a [(Buffer, u64)]>,
-//     index_buffer: Option<(&'a Buffer, u64, vk::IndexType)>,
-// }
-
-// #[derive(Default)]
-// pub struct ComputeBindings<'a> {
-//     compute_pipeline: Option<&'a ComputePipeline>,
-// }
-
 pub struct ExecutableCommandBuffer(pub(crate) CommandBuffer);
 
 impl ExecutableCommandBuffer {
-    pub unsafe fn as_record(self) -> CommandBufferRecorder<'static> {
+    /// # Safety: caller must ensure that this command buffer is in recording state
+    pub unsafe fn to_record(self) -> CommandBufferRecorder<'static> {
         let usage = self.0.usage;
 
         self.0.begin(usage)
     }
 
-    pub unsafe fn as_executable(self) -> Self {
+    /// # Safety: caller must ensure that this command buffer can be submitted again
+    pub unsafe fn to_executable(self) -> Self {
         self
     }
 }
@@ -1801,4 +1353,3 @@ mod test {
             .unwrap();
     }
 }
-// }
