@@ -44,7 +44,7 @@ impl ComputePipeline {
         descriptor_set_layouts: &[DescriptorSetLayout],
         device: &Device,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
-        let shader_code = utils::read_file("shaders/compute.spv");
+        let shader_code = utils::read_file("shaders/compute.comp.spv");
         let module = utils::create_shader_module(&shader_code, device);
 
         let name = CString::new("main").unwrap();

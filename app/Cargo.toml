@@ -10,7 +10,7 @@ version = "0.1.0"
 alignas = "0.2.0"
 ash = "0.31.0"
 caldeira = {path = "../caldeira"}
-image = "0.23.8"
+image = "0.23.9"
 log = "0.4.11"
 memoffset = "0.5.5"
 pretty_env_logger = "0.4.0"
@@ -21,3 +21,6 @@ winit = "0.22.2"
 [features]
 default = ["validation-layers"]
 validation-layers = ["caldeira/validation-layers"]
+
+[build-dependencies]
+shaderc = "0.6.2"
