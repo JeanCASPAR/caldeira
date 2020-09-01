@@ -177,14 +177,11 @@ impl fmt::Display for ClearError {
 
 impl Error for ClearError {}
 
+pub type InlineSubpass =
+    dyn FnOnce(&mut InsideOfRenderpassScope<'_, '_>) -> Result<(), Box<dyn Error + Send + Sync>>;
+
 pub enum Subpass {
-    Inline {
-        callback: Box<
-            dyn FnOnce(
-                &mut InsideOfRenderpassScope<'_, '_>,
-            ) -> Result<(), Box<dyn Error + Send + Sync>>,
-        >,
-    },
+    Inline { callback: Box<InlineSubpass> },
 }
 
 impl Subpass {
@@ -1213,13 +1210,15 @@ pub struct GraphicsPipeline {
 pub struct ExecutableCommandBuffer(pub(crate) CommandBuffer);
 
 impl ExecutableCommandBuffer {
-    pub unsafe fn as_record(self) -> CommandBufferRecorder<'static> {
+    /// # Safety: caller must ensure that this command buffer is in recording state
+    pub unsafe fn to_record(self) -> CommandBufferRecorder<'static> {
         let usage = self.0.usage;
 
         self.0.begin(usage)
     }
 
-    pub unsafe fn as_executable(self) -> Self {
+    /// # Safety: caller must ensure that this command buffer can be submitted again
+    pub unsafe fn to_executable(self) -> Self {
         self
     }
 }

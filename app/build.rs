@@ -70,13 +70,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         #[cfg(debug_assertions)]
         if compilation_artifact.get_num_warnings() > 0 {
-            Err(compilation_artifact.get_warning_messages())?;
+            return Err(compilation_artifact.get_warning_messages().into());
         }
 
         let output_path = {
             let extension = file_path.extension().unwrap(); // Safe because we're sure it's a file and has an extension
-            let path = file_path.with_extension(Path::new(extension).with_extension("spv"));
-            path
+            file_path.with_extension(Path::new(extension).with_extension("spv"))
         };
 
         println!("cargo:rerun-if-changed={}", output_path.display());

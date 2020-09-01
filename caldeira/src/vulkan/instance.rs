@@ -22,7 +22,7 @@ impl Instance {
         let version = entry
             .try_enumerate_instance_version()
             .unwrap()
-            .unwrap_or(vk::make_version(1, 0, 0)); // If vulkan 1.1 is not supported, this functions is not present
+            .unwrap_or_else(|| vk::make_version(1, 0, 0)); // If vulkan 1.1 is not supported, this function is not present
 
         let major = vk::version_major(version);
         let minor = vk::version_minor(version);
@@ -30,6 +30,8 @@ impl Instance {
 
         println!("Vulkan version: {}.{}.{}", major, minor, patch);
 
+        // We allow this lint since it's not a extreme comparison but a default parameter
+        #[allow(clippy::absurd_extreme_comparisons)]
         if major < REQUIRED_MAJOR || minor < REQUIRED_MINOR || patch < REQUIRED_PATCH {
             panic!(
                 "The minimum required version is {}.{}.{} and device version is {}.{}.{}",
