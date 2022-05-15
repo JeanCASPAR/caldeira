@@ -1,0 +1,274 @@
+#version 450
+#extension GL_ARB_shader_image_load_store : enable
+
+layout(local_size_x = 10, local_size_y = 10) in;
+
+layout(binding = 0, set = 0) buffer Storage {
+    restrict uint x;
+} data;
+
+layout(binding = 1, set = 0, rgba8ui) uniform restrict writeonly uimage2D image;
+
+layout(binding = 2, set = 0) uniform Noise {
+    restrict uint[256] permutations;
+    restrict vec2[16] gradients;
+};
+
+uint to_u8(in float val) {
+    if (val >= 1.0) {
+        return 255;
+    }
+
+    if (val <= 0.0) {
+        return 0;
+    }
+
+    return uint(val * 256.0);
+}
+
+uvec2 to_u8(in vec2 val) {
+    return uvec2(
+        to_u8(val.r),
+        to_u8(val.g)
+    );
+}
+
+uvec3 to_u8(in vec3 val) {
+    return uvec3(
+        to_u8(val.r),
+        to_u8(val.g),
+        to_u8(val.b)
+    );
+}
+
+uvec4 to_u8(in vec4 val) {
+    return uvec4(
+        to_u8(val.r),
+        to_u8(val.g),
+        to_u8(val.b),
+        to_u8(val.a)
+    );
+}
+
+/*
+float random(in vec2 _st) {
+    return fract(sin(dot(_st.xy,
+                         vec2(12.9898,78.233)))*
+        43758.5453123);
+}
+
+float k(in uint dim) {
+    return f(dim);
+}
+
+float c(in uint dim) {
+    return g(dim);
+}
+
+float simplex_noise(in vec2 coords) {
+    const vec2 simplex_coord = to_simplex_coord(coords);
+
+    //On tronque les coordonnées de façon à obtenir le point
+    // le plus proche de l'origine du simplexe contenant P
+    const uvec2 integer_coords = uvec2(fract(simplex_coord));
+
+    //Nous effectuons le changement de base inverse,
+    // c'est-à-dire qu'à partir des coordonnées integer_coords
+    // d'un des sommets de notre simplexe, nous
+    // cherchons les coordonnées (X0, Y0) dans
+    // la base canonique.
+    const vec2 first_simplex_vertex = from_simplex_coord(vec2(integer_coords));
+
+    //Nous pouvons alors déterminer le premier vecteur
+    // AP. Il reste à déterminer BP et CP.
+    const vec2 v0 = coords - first_simplex_vertex;
+
+    //Nous devons déterminer si le point P se trouve
+    // dans le triangle isocèle supérieur, ou bien
+    // le triangle inférieur.
+    //Une fois cela déterminé, et en considérant
+    // que le premier sommet est (0,0), nous savons
+    // si le second sommet est (1,0) ou bien (0,1).
+    // Nous stockons ses coordonnées dans second_simplex_vertex
+    uvec2 second_simplex_vertex = uvec2(0);
+
+    if (first_simplex_vertex.x > first_simplex_vertex.y) {
+        second_simplex_vertex.x = 1;
+    } else {
+        second_simplex_vertex.y = 1;
+    }
+
+    //Nous pouvons alors déterminer les vecteurs BP et CP
+    //En effet, si nous appliquons notre formule
+    // aux vecteurs (0,1) et (1,0), nous
+    // constatons que les coordonnées dans
+    // la base canonique sont alors,
+    // respectivement (-C, 1-C) et (1-C, -C).
+    // Vecteur BP
+    const vec2 v1 = v0 - second_simplex_vertex + vec2(c(2));
+
+    //Le troisième point est nécessairement le point (1,1)
+    // dont les coordonnées sont (1-2C, 1-2C).
+    // Vecteur CP
+    const vec2 v2 = v0 + vec2(-1.0 + 2.0 * c(2));
+
+    const uvec2 indices = uvec2(mod(integer_coords, 256.0));
+    
+    // On calcule |AP|, |BP| et |CP|
+    const float square_d0 = v0.x * v0.x + v0.y * v0.y;
+    const float square_d1 = v1.x * v1.x + v1.y * v1.y;
+    const float square_d2 = v2.x * v2.x + v2.y * v2.y;
+
+    if (square_d0 >= 0.5) {
+        return 1.0;
+    }
+
+    //On effectue le produit scalaire,
+    // exactement de la même façon qu'avec
+    // le bruit de Perlin.
+    float res = 0.0;
+
+    res += perlin_radial(square_d0) * dot(v0, get_gradient(indices));
+    res += perlin_radial(square_d1) * dot(v1, get_gradient(uvec2(mod(indices + second_simplex_vertex, 256.0))));
+    res += perlin_radial(square_d2) * dot(v2, get_gradient(uvec2(mod(indices + uvec2(1), 256.0))));
+
+    //On applique le facteur K permettant de ramener
+    // l'amplitude de la valeur proche de [-1, 1].
+    const float result = 60.0 * res;
+
+    //On revient dans [0, 1]
+    // return (result + 1.0) * 0.5;
+    return res;
+}
+*/
+
+vec2 get_gradient(vec2 indices) {
+    uint rand_value = permutations[uint(mod(indices.y + permutations[uint(mod(indices.x, 256.0))], 256.0))];
+
+    //Applique un modulo 16 à cette valeur pour obtenir un
+    // gradient de couleurs, puis renvoie cet élément.
+    return gradients[uint(mod(rand_value, 16.0))];
+}
+
+float f(in uint dim) {
+    float n = float(dim);
+
+    return (sqrt(n + 1.0) - 1.0) / n;
+}
+
+float g(in uint dim) {
+    float n = float(dim);
+
+    return (1.0 - 1.0 / sqrt(n + 1.0)) / n;
+}
+
+vec2 to_simplex_coord(in vec2 coord) {
+    float f = f(2);
+
+    float sum = (coord.x + coord.y) * f;
+
+    float x = coord.x + sum;
+    float y = coord.y + sum;
+
+    return vec2(x, y);
+}
+
+vec2 from_simplex_coord(in vec2 coord) {
+    float g = g(2);
+
+    float sum = (coord.x + coord.y) * g;
+
+    float x = coord.x - sum;
+    float y = coord.y - sum;
+
+    return vec2(x, y);
+}
+
+float perlin_radial(float x) {
+    return pow(max(0.0, 0.5 - x), 4) * f(2);
+}
+
+vec2[3] compute_simplex_vertices(in vec2 coords) {
+    vec2[3] simplex_vertices = {
+        {0.0, 0.0},
+        {0.0, 0.0},
+        {1.0, 1.0},
+    };
+
+    if (coords.x > coords.y) {
+        simplex_vertices[1].x = 1.0;
+    } else {
+        simplex_vertices[1].y = 1.0;
+    }
+
+    return simplex_vertices;
+}
+
+float simplex_noise(in vec2 coords) {
+    const vec2 skewed = to_simplex_coord(coords); // = 0
+
+    const vec2 skewed_unit_hypercube_base = floor(skewed);
+
+    const vec2 internal_coords = fract(skewed);
+
+    const vec2[3] simplex_vertices = compute_simplex_vertices(internal_coords);
+
+    /* normal
+    = 0, 0
+    = 1, 0 pour moitié supérieure droite et 0, 1 pour moitié inférieure gauche
+    = 1, 1
+    */
+
+    const vec2[3] skewed_hypercube_coords = {
+        skewed_unit_hypercube_base + simplex_vertices[0], // = 0
+        skewed_unit_hypercube_base + simplex_vertices[1],
+        skewed_unit_hypercube_base + simplex_vertices[2],
+    };
+
+    const vec2[3] unskewed_coords = {
+        from_simplex_coord(skewed_hypercube_coords[0]), // = 0
+        from_simplex_coord(skewed_hypercube_coords[1]),
+        from_simplex_coord(skewed_hypercube_coords[2]),
+    };
+
+    // Tous == 0
+    const vec2[3] random_gradients = {
+        get_gradient(skewed_hypercube_coords[0]),
+        get_gradient(skewed_hypercube_coords[1]),
+        get_gradient(skewed_hypercube_coords[2]),
+    };
+
+    const vec2[3] differences = {
+        coords - unskewed_coords[0], // != vec2(0)
+        coords - unskewed_coords[1], // != vec2(0)
+        coords - unskewed_coords[2], // != vec2(0)
+    };
+
+    const float[3] contributions = {
+        perlin_radial(length(differences[0]) /* 0.5 < ? 1 */) /* != 0 */ * dot(differences[0], random_gradients[0]) /* == 0 */,
+        perlin_radial(length(differences[1]) /* 0 < ? < 0.5 */) /* == 0 */ * dot(differences[1], random_gradients[1]) /* == 0 */,
+        perlin_radial(length(differences[2]) /* 0 < ? < 0.5 */) /* == 0 */ * dot(differences[2], random_gradients[2]) /* == 0 */,
+    };
+
+    const float result = contributions[0] + contributions[1] + contributions[2];
+
+    return result * 60.0;
+}
+
+void main() {
+    // atomicAdd(data.x, 1);
+    
+    const ivec2 coords = ivec2(gl_GlobalInvocationID);
+
+    vec2 st = vec2(coords.xy) / (gl_NumWorkGroups * gl_WorkGroupSize).xy;
+
+    st *= 10.0;
+
+    const float color = simplex_noise(st);
+
+    atomicCompSwap(data.x, uint(color), 0);
+
+    uvec4 pixel = uvec4(uvec3(to_u8(color)), 255);
+
+    imageStore(image, coords, pixel);
+}

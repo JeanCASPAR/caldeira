@@ -1,0 +1,191 @@
+#version 450
+#extension GL_ARB_shader_image_load_store : enable
+
+layout(local_size_x = 10, local_size_y = 10) in;
+
+layout(binding = 0, set = 0) buffer Storage {
+    restrict uint x;
+} data;
+
+layout(binding = 1, set = 0, rgba8ui) uniform restrict writeonly uimage2D image;
+
+const uint[256] permutations = {
+    55, 164, 34, 238, 121, 116, 240, 195, 220, 162, 24, 20, 141, 52, 119, 180, 228, 136,
+    254, 82, 235, 14, 131, 169, 135, 233, 58, 31, 182, 189, 0, 12, 252, 26, 4, 84, 68, 178,
+    243, 54, 108, 203, 105, 41, 21, 151, 152, 130, 123, 94, 155, 76, 209, 91, 67, 33, 95,
+    213, 3, 28, 106, 29, 45, 192, 212, 5, 49, 118, 196, 50, 27, 230, 125, 255, 18, 72, 227,
+    183, 186, 207, 232, 104, 219, 88, 15, 22, 198, 226, 208, 137, 134, 191, 122, 71, 126,
+    244, 112, 75, 231, 117, 78, 60, 89, 40, 111, 107, 174, 166, 193, 38, 80, 69, 35, 74, 165,
+    37, 236, 234, 129, 159, 241, 132, 93, 115, 103, 153, 63, 32, 57, 179, 30, 86, 42, 39,
+    9, 65, 23, 6, 73, 124, 156, 53, 146, 163, 114, 56, 100, 44, 201, 7, 61, 168, 157, 223,
+    10, 147, 133, 206, 8, 70, 36, 250, 150, 102, 249, 48, 85, 99, 66, 251, 211, 16, 222,
+    204, 144, 161, 25, 167, 224, 98, 194, 138, 81, 176, 177, 148, 190, 145, 199, 77, 239,
+    120, 79, 59, 205, 225, 154, 185, 245, 1, 46, 200, 97, 247, 171, 140, 19, 218, 109, 197,
+    13, 181, 248, 62, 64, 173, 92, 113, 158, 184, 210, 229, 128, 90, 242, 149, 87, 172, 47,
+    237, 214, 143, 216, 160, 51, 217, 246, 170, 215, 187, 2, 142, 188, 139, 11, 96, 110, 127,
+    43, 101, 221, 253, 175, 83, 17, 202,
+};
+
+const vec2[16] gradients = {
+    {0.95637584, 0.2921391},
+    {-0.6078832, 0.79402643},
+    {0.98649853, -0.16376998},
+    {-0.51677966, -0.85611844},
+    {0.46301943, 0.8863481},
+    {0.4308294, 0.9024334},
+    {-0.73653585, -0.6763985},
+    {-0.9421358, -0.33523142},
+    {-0.3392239, -0.94070566},
+    {0.8434884, 0.53714746},
+    {0.31547728, -0.9489331},
+    {0.63836396, -0.7697347},
+    {-0.8877455, 0.46033454},
+    {-0.89790297, 0.44019338},
+    {-0.40960884, 0.91226125},
+    {0.96246636, -0.27140093},
+};
+
+uint to_u8(in float val) {
+    if (val >= 1.0) {
+        return 255;
+    }
+
+    if (val <= 0.0) {
+        return 0;
+    }
+
+    return uint(val * 256.0);
+}
+
+uvec2 to_u8(in vec2 val) {
+    return uvec2(
+        to_u8(val.r),
+        to_u8(val.g)
+    );
+}
+
+uvec3 to_u8(in vec3 val) {
+    return uvec3(
+        to_u8(val.r),
+        to_u8(val.g),
+        to_u8(val.b)
+    );
+}
+
+uvec4 to_u8(in vec4 val) {
+    return uvec4(
+        to_u8(val.r),
+        to_u8(val.g),
+        to_u8(val.b),
+        to_u8(val.a)
+    );
+}
+
+vec2 get_gradient(in uvec2 coords) {
+    uint rand_value = permutations[(coords.y + permutations[coords.x & 255]) & 255];
+
+    return gradients[rand_value & 15];
+}
+
+float quintic_poly(in float t) {
+    const float t3 = t * t * t;
+
+    return t3 * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+float perlin_noise(in vec2 coords) {
+    const uvec2 base_cell_coords = uvec2(floor(coords)) & 255;
+    const vec2 internal_coords = fract(coords);
+
+    const uvec2[4] cell_coords = {
+        base_cell_coords,
+        base_cell_coords + uvec2(1, 0),
+        base_cell_coords + uvec2(0, 1),
+        base_cell_coords + uvec2(1),
+    };
+
+    const vec2[4] corner_gradients = {
+        get_gradient(cell_coords[0]),
+        get_gradient(cell_coords[1]),
+        get_gradient(cell_coords[2]),
+        get_gradient(cell_coords[3]),
+    };
+
+    const vec2[4] differences = {
+        internal_coords,
+        internal_coords - uvec2(1, 0),
+        internal_coords - uvec2(0, 1),
+        internal_coords - uvec2(1, 1),
+    };
+
+    const float[4] dot_products = {
+        dot(differences[0], corner_gradients[0]),
+        dot(differences[1], corner_gradients[1]),
+        dot(differences[2], corner_gradients[2]),
+        dot(differences[3], corner_gradients[3]),
+    };
+
+    // const float x0 = smoothstep(dot_products[0], dot_products[1], internal_coords.x);
+    // const float x1 = smoothstep(dot_products[2], dot_products[3], internal_coords.x);
+
+    // const float result = smoothstep(x0, x1, internal_coords.y);
+
+    const float u = quintic_poly(internal_coords.x);
+    const float v = quintic_poly(internal_coords.y);
+    
+    const float x0 = mix(dot_products[0], dot_products[1], u);
+    const float x1 = mix(dot_products[2], dot_products[3], u);
+
+    const float result = mix(x0, x1, v);
+
+    // Return a value in [0, 1] instead of [-1, 1]
+    return (result + 1.0) / 2.0;
+}
+
+float octave_noise(in int octaves, in float frequency, in float persistence, in vec2 coords) {
+        float r = 0.0;
+        float f = frequency;
+        float amplitude = 0.5;
+
+        for (int i = 0; i < octaves; i++) {
+            //Translation du centre de symétrie en (i * 4096, i * 4096)
+            const ivec2 t = ivec2(i * 4096);
+
+            //Calcul du bruit translaté
+            r += perlin_noise(coords * f + t) * amplitude;
+
+            amplitude *= persistence;
+            f *= 2;
+        }
+
+        float geo_lim = (1.0 - persistence) / (1.0 - amplitude);
+
+        return r * geo_lim;
+}
+
+uvec3 color(in float noise) {
+    uvec3 rgb = uvec3(0);
+
+    rgb.r = to_u8(noise * 2.0);
+    rgb.g = to_u8((noise - 0.23) * 2.0);
+
+    return rgb;
+}
+
+void main() {
+    atomicAdd(data.x, 1);
+    
+    const ivec2 coords = ivec2(gl_GlobalInvocationID);
+
+    vec2 st = vec2(coords.xy) / (gl_NumWorkGroups * gl_WorkGroupSize).xy;
+
+    st *= 100.0;
+
+    const float noise = octave_noise(5, 0.5, 0.5, st);
+
+    const uvec3 rgb = color(noise);
+    
+    const uvec4 pixel = uvec4(rgb, 255);
+
+    imageStore(image, coords, pixel);
+}

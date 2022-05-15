@@ -326,14 +326,17 @@ fn main() {
 
             match event {
                 Event::WindowEvent { event, .. } => {
-                    if matches!(event, WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                    if matches!(
+                        event,
+                        WindowEvent::CloseRequested
+                            | WindowEvent::KeyboardInput {
+                                input: KeyboardInput {
+                                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                                    ..
+                                },
                                 ..
-                            },
-                        ..
-                    }) {
+                            }
+                    ) {
                         println!("The close button was pressed; stopping");
                         *control_flow = ControlFlow::Exit
                     }
